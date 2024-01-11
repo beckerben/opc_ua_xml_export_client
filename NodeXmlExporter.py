@@ -54,6 +54,8 @@ class NodeXMLExporter:
     async def import_nodes(self, server_url="opc.tcp://localhost:16664",
                            username="", password="", security=False):
         from asyncua import ua
+        from cryptography import x509
+        from cryptography.hazmat.backends import default_backend
 
         self.client = Client(server_url)
 
@@ -63,25 +65,34 @@ class NodeXMLExporter:
         if password is not None:
             self.client.set_password(password)
 
-        # Fix symmetric_key_size (not 0) of securityPolicy
-        # sec_policy = security_policies.SecurityPolicy()
-        # sec_policy.symmetric_key_size = 8
-        # self.client.security_policy = sec_policy
-
-        # Fix signature method of CryptographyNone
-        # def signature(self, data):
-        #    return None
-        # fixed_signature = types.MethodType(signature, CryptographyNone)
-        # self.client.security_policy.asymmetric_cryptography.signature =
-        #    fixed_signature
-
-        mode = "SignAndEncrypt"
-        certificate = "cert.der"
-        private_key = "key.pem"
-        policy_class = security_policies.SecurityPolicyBasic256Sha256
-        mode_class = getattr(ua.MessageSecurityMode, mode)
-
         if security:
+            # todo: make configurable & options for other security policies
+            mode = "SignAndEncrypt"
+            certificate = "cert.der"
+            private_key = "key.pem"
+            policy_class = security_policies.SecurityPolicyBasic256Sha256
+            mode_class = getattr(ua.MessageSecurityMode, mode)
+
+            # Read the certificate file
+            with open(certificate, "rb") as cert_file:
+                cert_data = cert_file.read()
+
+            # Parse the certificate
+            cert = x509.load_der_x509_certificate(cert_data, default_backend())
+
+            # Extract the URL from the Subject Alternative Name extension
+            subject_alt_names = cert.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            ).value
+            for name in subject_alt_names:
+                if isinstance(name, x509.UniformResourceIdentifier):
+                    url = name.value
+                    break
+            else:
+                url = ""
+
+            self.client.application_uri = url
+
             await self.client.set_security(
                 policy=policy_class,
                 certificate=certificate,
