@@ -65,11 +65,13 @@ class XmlExporter(xmlexporter.XmlExporter):
         for node in nodes:
             node_idxs = [node.nodeid.NamespaceIndex]
             try:
-                node_idxs.append(node.get_browse_name().NamespaceIndex)
+                q_name = await node.read_browse_name()
+                node_idxs.append(q_name.NamespaceIndex)
             except Exception:
                 pass
             try:
-                node_idxs.extend(ref.NodeId.NamespaceIndex for ref in await node.get_references())
+                node_idxs.extend(ref.NodeId.NamespaceIndex 
+                                 for ref in await node.get_references())
             except Exception:
                 pass
             node_idxs = list(set(node_idxs))  # remove duplicates
